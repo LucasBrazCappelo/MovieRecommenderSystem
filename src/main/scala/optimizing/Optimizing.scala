@@ -46,10 +46,22 @@ object Optimizing extends App {
     val test = loadSpark(sc, conf.test(), conf.separator(), conf.users(), conf.movies())
 
     val measurements = (1 to conf.num_measurements()).map(x => timingInMs(() => {
-      0.0
+      val kNN_model = kNN_builder(train.copy, 300)
+      val mae_kNN = MAE(test, kNN_model)
+      mae_kNN
     }))
     val timings = measurements.map(t => t._2)
     val mae = measurements(0)._1
+
+    val k = 10
+
+    val averageUsers = averageRatingUsers(train)
+    val normalizedRatings = averageDeviationItems(train, averageUsers)
+    val cosSimilarity = cosineSimilarity(normalizedRatings)
+
+    val kNN_User_Similaritiy = keepKnnSuv(k, cosSimilarity)
+    val kNN_model = kNN_builder(train, k)
+    val mae_kNN = MAE(test, kNN_model) // We want 0.8287 ± 0.0001
 
     // Save answers as JSON
     def printToFile(content: String,
@@ -72,12 +84,12 @@ object Optimizing extends App {
             "num_measurements" -> ujson.Num(conf.num_measurements())
           ),
           "BR.1" -> ujson.Obj(
-            "1.k10u1v1" -> ujson.Num(0.0),
-            "2.k10u1v864" -> ujson.Num(0.0),
-            "3.k10u1v886" -> ujson.Num(0.0),
-            "4.PredUser1Item1" -> ujson.Num(0.0),
-            "5.PredUser327Item2" -> ujson.Num(0.0),
-            "6.Mae" -> ujson.Num(0.0)
+            "1.k10u1v1" -> ujson.Num(kNN_User_Similaritiy(0,0)),
+            "2.k10u1v864" -> ujson.Num(kNN_User_Similaritiy(0,863)),
+            "3.k10u1v886" -> ujson.Num(kNN_User_Similaritiy(0,885)),
+            "4.PredUser1Item1" -> ujson.Num(kNN_model(0,0)),
+            "5.PredUser327Item2" -> ujson.Num(kNN_model(326,1)),
+            "6.Mae" -> ujson.Num(mae_kNN)
           ),
           "BR.2" ->  ujson.Obj(
             "average (ms)" -> ujson.Num(mean(timings)), // Datatype of answer: Double
