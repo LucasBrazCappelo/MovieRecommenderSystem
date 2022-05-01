@@ -54,12 +54,7 @@ object Optimizing extends App {
     val mae = measurements(0)._1
 
     val k = 10
-
-    val averageUsers = averageRatingUsers(train)
-    val normalizedRatings = averageDeviationItems(train, averageUsers)
-    val cosSimilarity = cosineSimilarity(normalizedRatings)
-
-    val kNN_User_Similaritiy = keepKnnSuv(k, cosSimilarity)
+    val suv = similarityFromNothing(train, k)
     val kNN_model = kNN_builder(train, k)
     val mae_kNN = MAE(test, kNN_model) // We want 0.8287 ± 0.0001
 
@@ -84,9 +79,9 @@ object Optimizing extends App {
             "num_measurements" -> ujson.Num(conf.num_measurements())
           ),
           "BR.1" -> ujson.Obj(
-            "1.k10u1v1" -> ujson.Num(kNN_User_Similaritiy(0,0)),
-            "2.k10u1v864" -> ujson.Num(kNN_User_Similaritiy(0,863)),
-            "3.k10u1v886" -> ujson.Num(kNN_User_Similaritiy(0,885)),
+            "1.k10u1v1" -> ujson.Num(suv(0,0)),
+            "2.k10u1v864" -> ujson.Num(suv(0,863)),
+            "3.k10u1v886" -> ujson.Num(suv(0,885)),
             "4.PredUser1Item1" -> ujson.Num(kNN_model(0,0)),
             "5.PredUser327Item2" -> ujson.Num(kNN_model(326,1)),
             "6.Mae" -> ujson.Num(mae_kNN)

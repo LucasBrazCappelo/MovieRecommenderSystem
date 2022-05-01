@@ -130,19 +130,19 @@ package object predictions
         
         val globalMean = globalAverage(s); // Default value
 
-        return (sum(data)/countNonZeros).map(o => if (o.isNaN()) globalMean else o)
+        return (sum(data)/countNonZeros).map(o => if (o.isNaN() || o.isInfinity) globalMean else o)
 	}
 
 	def averageDeviationItems(s: CSCMatrix[Double], averageUsers: DenseVector[Double]): DenseMatrix[Double] = {
         val ret_builder = new CSCMatrix.Builder[Double](rows=s.rows, cols=s.cols);
-        for ((key,value) <- s.activeIterator) {
-            ret_builder.add(key._1, key._2, normalizedDeviation(value, averageUsers(key._1)))
+        for (((user,item),value) <- s.activeIterator) {
+            ret_builder.add(user, item, normalizedDeviation(value, averageUsers(user)))
         }
-        return ret_builder.result().toDense // devRatingItemsPerUser
+        return ret_builder.result().toDense // devRatingItemsPerUser # TODO: Dommage que ce soit un DenseMatrix
     }
 
     def cosineSimilarity(devRatingItemsPerUser: DenseMatrix[Double]): DenseMatrix[Double] = {
-        val normsUsers = sqrt(sum(devRatingItemsPerUser*:*devRatingItemsPerUser, Axis._1))
+        val normsUsers = sum(devRatingItemsPerUser*:*devRatingItemsPerUser, Axis._1).map(o => scala.math.sqrt(o))
         val ret_builder = new CSCMatrix.Builder[Double](rows=devRatingItemsPerUser.rows, cols=devRatingItemsPerUser.cols);
         for (user <- 0 until devRatingItemsPerUser.rows) {
             breakable {
@@ -160,10 +160,10 @@ package object predictions
         return ret * ret.t // suvPerUser
     }
 
-    def keepKnnSuv(k: Int, suvPerUser: DenseMatrix[Double]): DenseMatrix[Double] = {
+    def keepKnnSuv(k: Int, suvPerUser: DenseMatrix[Double], firstInt:Int = 1): DenseMatrix[Double] = {
         for (x <- 0 until suvPerUser.rows) {
-            val kNN_user = argtopk(suvPerUser(x, ::).t, k+1).toArray.slice(1, k + 1); // 1 to k+1 because first one is the user itself
-            for (y <- 0 until suvPerUser.rows) {
+            val kNN_user = argtopk(suvPerUser(x, ::).t, k+1).toArray.slice(firstInt, k + 1); // 1 to k+1 because first one is the user itself
+            for (y <- 0 until suvPerUser.cols) {
                 if (!kNN_user.contains(y)) {
                     suvPerUser(x, y) = 0.0 // keep value only for kNN of user x
                 }
@@ -172,9 +172,16 @@ package object predictions
         return suvPerUser
     }
 
+    def similarityFromNothing(s: CSCMatrix[Double], k: Int): DenseMatrix[Double] = {
+        val averageUsers = averageRatingUsers(s)
+        val devRatingItemsPerUser = averageDeviationItems(s, averageUsers)
+        val suvPerUser = cosineSimilarity(devRatingItemsPerUser)
+        return keepKnnSuv(k, suvPerUser)
+    }
+
     def averageDeviationItemsCosine(s: CSCMatrix[Double], devRatingItemsPerUser: DenseMatrix[Double], kNN_User_Similarity: DenseMatrix[Double]): DenseMatrix[Double] = {
         val nonZerosIndicator = s.toDense.map(o => if (o != 0.0) 1.0 else 0.0)
-        val ret = (kNN_User_Similarity * devRatingItemsPerUser) /:/ ((abs(kNN_User_Similarity) * nonZerosIndicator).map(o => if (o != 0.0) o else 1.0))
+        val ret = (kNN_User_Similarity * devRatingItemsPerUser) /:/ ((kNN_User_Similarity.map(o => abs(o)) * nonZerosIndicator).map(o => if (o != 0.0) o else 1.0))
         return ret
     }
 
@@ -182,8 +189,8 @@ package object predictions
         val averageUsers = averageRatingUsers(s)
         val devRatingItemsPerUser = averageDeviationItems(s, averageUsers) // use normalizedDeviation : default value 0.0 if (u,i) not in s
         val suvPerUser = cosineSimilarity(devRatingItemsPerUser)
-        val kNN_User_Similarity = keepKnnSuv(k, suvPerUser) // real suvPerUser
-        val averageDevItemsCos = averageDeviationItemsCosine(s, devRatingItemsPerUser, kNN_User_Similarity)    
+        val kNN_User_Similarity = keepKnnSuv(k, suvPerUser,0) // real suvPerUser
+        val averageDevItemsCos = averageDeviationItemsCosine(s, devRatingItemsPerUser, kNN_User_Similarity)
 
         val usersSet = s.toDense(*,::).map(o => any(o))
 
