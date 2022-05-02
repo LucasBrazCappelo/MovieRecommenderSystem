@@ -5,6 +5,7 @@ import breeze.numerics._
 import scala.io.Source
 import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.Broadcast
 
 package object predictions
 {
@@ -51,7 +52,7 @@ package object predictions
         builder.result()
     }
 
-    def loadSpark(sc : org.apache.spark.SparkContext,  path : String, sep : String, nbUsers : Int, nbMovies : Int) : CSCMatrix[Double] = {
+    def loadSpark(sc : SparkContext,  path : String, sep : String, nbUsers : Int, nbMovies : Int) : CSCMatrix[Double] = {
         val file = sc.textFile(path)
         val ratings = file
             .map(l => {
@@ -93,8 +94,8 @@ package object predictions
     }
 
 	///////////////////////// BR //////////////////////////////
-
-	def scale(r_ui: Double, average_r_user: Double): Double = {
+    
+    def scale(r_ui: Double, average_r_user: Double): Double = {
         var ret: Double = 1; // Default value
         if (r_ui > average_r_user) {
             ret = 5 - average_r_user
@@ -140,7 +141,7 @@ package object predictions
     }
 
     def cosineSimilarity(devRatingItemsPerUser: CSCMatrix[Double], k: Int): CSCMatrix[Double] = {
-        val normsUsers: DenseVector[Double] = sum(devRatingItemsPerUser.map(o => o*o).toDense(*,::)).map(o => scala.math.sqrt(o))
+        val normsUsers: DenseVector[Double] = sum(devRatingItemsPerUser.mapActiveValues(o => o*o).toDense(*,::)).map(o => scala.math.sqrt(o))
         val halfSuv_builder = new CSCMatrix.Builder[Double](rows=devRatingItemsPerUser.rows, cols=devRatingItemsPerUser.cols);
         for (((user, item), value) <- devRatingItemsPerUser.activeIterator) {
             if (normsUsers(user) != 0.0) {
@@ -168,9 +169,27 @@ package object predictions
         return suv
     }
 
+    def ifZeroBecomeOne(x: Double): Double = {
+        if (x == 0.0) {
+            return 1.0
+        }
+        else {
+            return x
+        }
+    }
+
+    def indicator(x: Double): Double = {
+        if (x == 0.0) {
+            return 0.0
+        }
+        else {
+            return 1.0
+        }
+    }
+
     def averageDeviationItemsCosine(s: CSCMatrix[Double], devRatingItemsPerUser: CSCMatrix[Double], suvPerUser: CSCMatrix[Double]): DenseMatrix[Double] = {
-        val nonZerosIndicator: DenseMatrix[Double] = s.map(o => if (o != 0.0) 1.0 else 0.0).toDense
-        val averageDevItemsCos: DenseMatrix[Double] = (suvPerUser.toDense * devRatingItemsPerUser.toDense) /:/ ((suvPerUser.map(o => abs(o)).toDense * nonZerosIndicator).map(o => if (o != 0.0) o else 1.0))
+        val nonZerosIndicator: DenseMatrix[Double] = s.mapActiveValues(o => indicator(o)).toDense
+        val averageDevItemsCos: DenseMatrix[Double] = (suvPerUser.toDense * devRatingItemsPerUser.toDense) /:/ ((suvPerUser.mapActiveValues(o => abs(o)).toDense * nonZerosIndicator).map(o => ifZeroBecomeOne(o)))
         return averageDevItemsCos
     }
 
@@ -218,13 +237,13 @@ package object predictions
         return (kNN_model_builder.result().toDense, suvPerUser) 
     }
 
-    def topk(u: Int, br: org.apache.spark.broadcast.Broadcast[DenseMatrix[Double]], k: Int): IndexedSeq[((Int, Int), Double)] = {
+    def topk(u: Int, br: Broadcast[DenseMatrix[Double]], k: Int): IndexedSeq[((Int, Int), Double)] = {
         val suv_u: DenseVector[Double] = br.value * br.value.t(::, u)
         return argtopk(suv_u, k + 1).map(v => ((u, v), suv_u(v)))
     }
 
     def cosineSimilarityParallel(devRatingItemsPerUser: CSCMatrix[Double], k: Int, sc: SparkContext): CSCMatrix[Double] = {
-        val normsUsers: DenseVector[Double] = sum(devRatingItemsPerUser.map(o => o*o).toDense(*,::)).map(o => scala.math.sqrt(o))
+        val normsUsers: DenseVector[Double] = sum(devRatingItemsPerUser.mapActiveValues(o => o*o).toDense(*,::)).map(o => scala.math.sqrt(o))
         val halfSuv_builder = new CSCMatrix.Builder[Double](rows=devRatingItemsPerUser.rows, cols=devRatingItemsPerUser.cols);
         for (((user, item), value) <- devRatingItemsPerUser.activeIterator) {
             if (normsUsers(user) != 0.0) {
