@@ -219,9 +219,9 @@ package object predictions
     }
 
     def topk(u: Int, br: org.apache.spark.broadcast.Broadcast[CSCMatrix[Double]], k: Int): IndexedSeq[((Int, Int), Double)] = {
-        val br_value: CSCMatrix[Double] = br.value
-        val cosineSimiliarities_u = br_value * (br_value.toDense.t(::,u))
-        return argtopk(cosineSimiliarities_u, k + 1).map(v => ((u, v), cosineSimiliarities_u(v)))
+        val br_value: DenseMatrix[Double] = br.value.toDense
+        val suv_u: DenseVector[Double] = br_value * br_value.t(::, u)
+        return argtopk(suv_u, k + 1).map(v => ((u, v), suv_u(v)))
     }
 
     def cosineSimilarityParallel(devRatingItemsPerUser: CSCMatrix[Double], k: Int, sc: SparkContext): CSCMatrix[Double] = {
