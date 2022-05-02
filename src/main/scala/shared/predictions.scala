@@ -187,14 +187,14 @@ package object predictions
 
     def kNN_builder(s: CSCMatrix[Double], k: Int) : DenseMatrix[Double] = {
         val averageUsers = averageRatingUsers(s)
-        val devRatingItemsPerUser = averageDeviationItems(s, averageUsers) // use normalizedDeviation : default value 0.0 if (u,i) not in s
+        val devRatingItemsPerUser = averageDeviationItems(s, averageUsers) 
         val suvPerUser = cosineSimilarity(devRatingItemsPerUser)
-        val suvPerUserFiltered = keepKnnSuv(k, suvPerUser,0) // real suvPerUser
+        val suvPerUserFiltered = keepKnnSuv(k, suvPerUser,0)
         val averageDevItemsCos = averageDeviationItemsCosine(s, devRatingItemsPerUser, suvPerUserFiltered)
 
         val usersSet = s.toDense(*,::).map(o => any(o))
 
-        val kNN_model_builder = new CSCMatrix.Builder[Double](rows=s.rows, cols=s.cols); // predictRatingCosineKNN Matrix builder
+        val kNN_model_builder = new CSCMatrix.Builder[Double](rows=s.rows, cols=s.cols);
         for (user <- 0 until s.rows) {
             for (item <- 0 until s.cols) {
                 kNN_model_builder.add(user, item, predictRating(averageUsers(user), averageDevItemsCos(user, item), usersSet(user)))
