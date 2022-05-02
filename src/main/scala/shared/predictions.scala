@@ -162,11 +162,12 @@ package object predictions
         return suvPerUserFiltered_builder.result()
     }
 
-    def similarityFromNothing(s: CSCMatrix[Double], k: Int): CSCMatrix[Double] = {
-        val averageUsers: DenseVector[Double] = averageRatingUsers(s)
-        val devRatingItemsPerUser: CSCMatrix[Double] = averageDeviationItems(s, averageUsers)
-        val suvPerUser: DenseMatrix[Double] = cosineSimilarity(devRatingItemsPerUser)
-        return keepKnnSuv(k, suvPerUser)
+    def addAutoSimilarityZero(suvPerUserFiltered: CSCMatrix[Double]): CSCMatrix[Double] = {
+        val suv: CSCMatrix[Double] = suvPerUserFiltered.copy
+        for (u <- 0 until suv.rows) {
+            suv.update(u, u, 0.0)
+        }
+        return suv
     }
 
     def averageDeviationItemsCosine(s: CSCMatrix[Double], devRatingItemsPerUser: CSCMatrix[Double], suvPerUserFiltered: CSCMatrix[Double]): DenseMatrix[Double] = {
@@ -175,7 +176,7 @@ package object predictions
         return averageDevItemsCos
     }
 
-    def kNN_builder(s: CSCMatrix[Double], k: Int): DenseMatrix[Double] = {
+    def kNN_builder(s: CSCMatrix[Double], k: Int): (DenseMatrix[Double], CSCMatrix[Double]) = {
         val averageUsers: DenseVector[Double] = averageRatingUsers(s)
         val devRatingItemsPerUser: CSCMatrix[Double] = averageDeviationItems(s, averageUsers) 
         val suvPerUser: DenseMatrix[Double] = cosineSimilarity(devRatingItemsPerUser)
@@ -190,10 +191,10 @@ package object predictions
                 kNN_model_builder.add(user, item, predictRating(averageUsers(user), averageDevItemsCos(user, item), usersSet(user)))
             }
         }
-        return kNN_model_builder.result().toDense
+        return (kNN_model_builder.result().toDense, suvPerUserFiltered)
     }
 
-    def MAE(s_test: CSCMatrix[Double], kNN_model: DenseMatrix[Double]): Double = {
+    def computeMAE(s_test: CSCMatrix[Double], kNN_model: DenseMatrix[Double]): Double = {
         val errors: List[Double] = (for (((user,item),value) <- s_test.activeIterator) yield abs(kNN_model(user, item) - value)).toList
         return mean(errors)
     }
