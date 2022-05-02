@@ -119,12 +119,12 @@ package object predictions
     }
 
   	def globalAverage(s: CSCMatrix[Double]): Double = {
-		return sum(s) / s.findAll(rating => rating != 0.0).size
+		return sum(s) / s.findAll(rating => rating != 0.0).length
 	}
 
 	def averageRatingUsers(s: CSCMatrix[Double]): DenseVector[Double] = {
 		val data = s.toDense(*,::) // We work on each line
-		val countNonZeros: DenseVector[Double] = data.map(_.foldLeft(0.0)((acc, num) => if (num != 0.0) acc + 1.0 else acc))
+		val countNonZeros: DenseVector[Double] = data.map(o => o.findAll(rating => rating != 0.0).length.toDouble)
         
         val globalMean: Double = globalAverage(s); // Default value
 
@@ -152,9 +152,9 @@ package object predictions
 
         val suvPerUser_builder = new CSCMatrix.Builder[Double](rows=suvPerUserDense.rows, cols=suvPerUserDense.cols);
         for (u <- 0 until suvPerUserDense.rows) {
-            val kNN_user: Array[Int] = argtopk(suvPerUserDense(u, ::).t, k+1).toArray.slice(0, k + 1); // We'll drop the autosimilarity after
+            val kNN_user: IndexedSeq[Int] = argtopk(suvPerUserDense(u, ::).t, k+1); // We'll drop the autosimilarity after
             for (v <- kNN_user) {
-                suvPerUser_builder.add(u, v, suvPerUserDense(u,v)) // keep value only for kNN of user x
+                suvPerUser_builder.add(u, v, suvPerUserDense(u,v)) // keep value only for kNN of user u
             }
         }
         return suvPerUser_builder.result()
@@ -192,27 +192,61 @@ package object predictions
     }
 
     def computeMAE(s_test: CSCMatrix[Double], kNN_model: DenseMatrix[Double]): Double = {
-        val errors: List[Double] = (for (((user,item),value) <- s_test.activeIterator) yield abs(kNN_model(user, item) - value)).toList
-        return mean(errors)
+        var kNN_MAE = 0.0;
+        for (((user, item), value) <- s_test.activeIterator) {
+            kNN_MAE += abs(value - kNN_model(user, item))
+        }
+        return kNN_MAE/s_test.activeSize.toDouble
     }
 
 	///////////////////////// EK //////////////////////////////
 
     def kNN_builder_parallel(s: CSCMatrix[Double], k: Int, sc: SparkContext): (DenseMatrix[Double], CSCMatrix[Double]) = {
-        val averageUsers: DenseVector[Double] = averageRatingUsers(s) // parallel eventually
-        val devRatingItemsPerUser: CSCMatrix[Double] = averageDeviationItems(s, averageUsers) // parallel eventually
-        val suvPerUser: CSCMatrix[Double] = cosineSimilarity(devRatingItemsPerUser, k) // parallel ///////////////////////////////////////////////////
-        val averageDevItemsCos: DenseMatrix[Double] = averageDeviationItemsCosine(s, devRatingItemsPerUser, suvPerUser) // parallel eventually
+        val averageUsers: DenseVector[Double] = averageRatingUsers(s)
+        val devRatingItemsPerUser: CSCMatrix[Double] = averageDeviationItems(s, averageUsers)
+        val suvPerUser: CSCMatrix[Double] = cosineSimilarityParallel(devRatingItemsPerUser, k, sc) // Everything else could be parallelize but it's not what expected in the pdf
+        val averageDevItemsCos: DenseMatrix[Double] = averageDeviationItemsCosine(s, devRatingItemsPerUser, suvPerUser)
 
-        val usersSet: DenseVector[Boolean] = s.toDense(*,::).map(o => any(o)) // parallel eventually
+        val usersSet: DenseVector[Boolean] = s.toDense(*,::).map(o => any(o))
 
-        val kNN_model_builder = new CSCMatrix.Builder[Double](rows=s.rows, cols=s.cols); // parallel eventually
+        val kNN_model_builder = new CSCMatrix.Builder[Double](rows=s.rows, cols=s.cols);
         for (user <- 0 until s.rows) {
             for (item <- 0 until s.cols) {
                 kNN_model_builder.add(user, item, predictRating(averageUsers(user), averageDevItemsCos(user, item), usersSet(user)))
             }
         }
-        return (kNN_model_builder.result().toDense, suvPerUser)
+        return (kNN_model_builder.result().toDense, suvPerUser) 
+    }
+
+    def topk(u: Int, br: org.apache.spark.broadcast.Broadcast[CSCMatrix[Double]], k: Int): IndexedSeq[((Int, Int), Double)] = {
+        val br_value: CSCMatrix[Double] = br.value
+        val cosineSimiliarities_u = br_value * (br_value.toDense.t(::,u))
+        return argtopk(cosineSimiliarities_u, k + 1).map(v => ((u, v), cosineSimiliarities_u(v)))
+    }
+
+    def cosineSimilarityParallel(devRatingItemsPerUser: CSCMatrix[Double], k: Int, sc: SparkContext): CSCMatrix[Double] = {
+        val normsUsers: DenseVector[Double] = sum(devRatingItemsPerUser.map(o => o*o).toDense(*,::)).map(o => scala.math.sqrt(o))
+        val halfSuv_builder = new CSCMatrix.Builder[Double](rows=devRatingItemsPerUser.rows, cols=devRatingItemsPerUser.cols);
+        for (((user, item), value) <- devRatingItemsPerUser.activeIterator) {
+            if (normsUsers(user) != 0.0) {
+                halfSuv_builder.add(user, item, value/normsUsers(user))
+            }
+        }
+        val halfSuv: CSCMatrix[Double] = halfSuv_builder.result()
+        
+        val br = sc.broadcast(halfSuv)
+
+        val nb_users: Int = halfSuv.rows
+    
+        val topks: Array[IndexedSeq[((Int, Int), Double)]] = sc.parallelize(0 until nb_users).map(u => topk(u, br, k)).collect()
+
+        val suvPerUser_builder = new CSCMatrix.Builder[Double](rows=nb_users, cols=nb_users)
+        for (topks_node <- topks) {
+            for (((u, v), value) <- topks_node) {
+                suvPerUser_builder.add(u, v, value)
+            }
+        }
+        return suvPerUser_builder.result()
     }
 
     ///////////////////////// AK //////////////////////////////
