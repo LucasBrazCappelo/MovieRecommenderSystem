@@ -218,9 +218,8 @@ package object predictions
         return (kNN_model_builder.result().toDense, suvPerUser) 
     }
 
-    def topk(u: Int, br: org.apache.spark.broadcast.Broadcast[CSCMatrix[Double]], k: Int): IndexedSeq[((Int, Int), Double)] = {
-        val br_value: DenseMatrix[Double] = br.value.toDense
-        val suv_u: DenseVector[Double] = br_value * br_value.t(::, u)
+    def topk(u: Int, br: org.apache.spark.broadcast.Broadcast[DenseMatrix[Double]], k: Int): IndexedSeq[((Int, Int), Double)] = {
+        val suv_u: DenseVector[Double] = br.value * br.value.t(::, u)
         return argtopk(suv_u, k + 1).map(v => ((u, v), suv_u(v)))
     }
 
@@ -232,12 +231,11 @@ package object predictions
                 halfSuv_builder.add(user, item, value/normsUsers(user))
             }
         }
-        val halfSuv: CSCMatrix[Double] = halfSuv_builder.result()
-        
+        val halfSuv: DenseMatrix[Double] = halfSuv_builder.result().toDense
+        val nb_users: Int = halfSuv.rows
+
         val br = sc.broadcast(halfSuv)
 
-        val nb_users: Int = halfSuv.rows
-    
         val topks: Array[IndexedSeq[((Int, Int), Double)]] = sc.parallelize(0 until nb_users).map(u => topk(u, br, k)).collect()
 
         val suvPerUser_builder = new CSCMatrix.Builder[Double](rows=nb_users, cols=nb_users)
