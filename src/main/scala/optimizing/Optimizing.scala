@@ -52,8 +52,7 @@ object Optimizing extends App {
     }))
     val timings = measurements.map(t => t._2)
 
-    val k = 10
-    val (kNN_model, suvPerUserFiltered) = kNN_builder(train, k)
+    val (kNN_model, suvPerUserFiltered) = kNN_builder(train, 10)
     val suv = addAutoSimilarityZero(suvPerUserFiltered)
     val kNN_MAE = computeMAE(test, kNN_model)
 
