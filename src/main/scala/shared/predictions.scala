@@ -121,7 +121,7 @@ package object predictions
     }
 
   	def globalAverage(s: CSCMatrix[Double]): Double = {
-		return sum(s) / s.findAll(row => row != 0.0).size
+		return sum(s) / s.findAll(rating => rating != 0.0).size
 	}
 
 	def averageRatingUsers(s: CSCMatrix[Double]): DenseVector[Double] = {
@@ -130,7 +130,7 @@ package object predictions
         
         val globalMean = globalAverage(s); // Default value
 
-        return (sum(data)/countNonZeros).map(o => if (o.isNaN() || o.isInfinity) globalMean else o)
+        return (sum(data):/countNonZeros).map(o => if (o.isNaN() || o.isInfinity) globalMean else o)
 	}
 
 	def averageDeviationItems(s: CSCMatrix[Double], averageUsers: DenseVector[Double]): DenseMatrix[Double] = {
