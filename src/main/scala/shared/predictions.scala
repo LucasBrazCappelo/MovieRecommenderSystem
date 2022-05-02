@@ -6,8 +6,6 @@ import scala.io.Source
 import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkContext
 
-import scala.util.control.Breaks._
-
 package object predictions
 {
     // ------------------------ For template
@@ -133,55 +131,47 @@ package object predictions
         return (sum(data):/countNonZeros).map(o => if (o.isNaN() || o.isInfinity) globalMean else o)
 	}
 
-	def averageDeviationItems(s: CSCMatrix[Double], averageUsers: DenseVector[Double]): DenseMatrix[Double] = {
+	def averageDeviationItems(s: CSCMatrix[Double], averageUsers: DenseVector[Double]): CSCMatrix[Double] = {
         val devRatingItemsPerUser_builder = new CSCMatrix.Builder[Double](rows=s.rows, cols=s.cols);
         for (((user,item),value) <- s.activeIterator) {
             devRatingItemsPerUser_builder.add(user, item, normalizedDeviation(value, averageUsers(user)))
         }
-        return devRatingItemsPerUser_builder.result().toDense // TODO: Dommage que ce soit un DenseMatrix
+        return devRatingItemsPerUser_builder.result()
     }
 
-    def cosineSimilarity(devRatingItemsPerUser: DenseMatrix[Double]): DenseMatrix[Double] = {
-        val normsUsers = sum(devRatingItemsPerUser*:*devRatingItemsPerUser, Axis._1).map(o => scala.math.sqrt(o))
+    def cosineSimilarity(devRatingItemsPerUser: CSCMatrix[Double]): DenseMatrix[Double] = {
+        val normsUsers = sum(devRatingItemsPerUser.map(o => o*o).toDense(*,::)).map(o => scala.math.sqrt(o))
         val halfSuv_builder = new CSCMatrix.Builder[Double](rows=devRatingItemsPerUser.rows, cols=devRatingItemsPerUser.cols);
-        for (user <- 0 until devRatingItemsPerUser.rows) {
-            breakable {
-                for (item <- 0 until devRatingItemsPerUser.cols) {
-                    if (normsUsers(user) != 0.0) {
-                        halfSuv_builder.add(user, item, devRatingItemsPerUser(user,item)/normsUsers(user))
-                    }
-                    else {
-                        break
-                    }
-                }
+        for (((user, item), value) <- devRatingItemsPerUser.activeIterator) {
+            if (normsUsers(user) != 0.0) {
+                halfSuv_builder.add(user, item, value/normsUsers(user))
             }
         }
         val halfSuv = halfSuv_builder.result().toDense
-        return halfSuv * halfSuv.t // suvPerUser
+        return (halfSuv * halfSuv.t) // suvPerUser
     }
 
-    def keepKnnSuv(k: Int, suvPerUser: DenseMatrix[Double], firstInt:Int = 1): DenseMatrix[Double] = {
-        for (x <- 0 until suvPerUser.rows) {
-            val kNN_user = argtopk(suvPerUser(x, ::).t, k+1).toArray.slice(firstInt, k + 1); // 1 to k+1 because first one is the user itself
-            for (y <- 0 until suvPerUser.cols) {
-                if (!kNN_user.contains(y)) {
-                    suvPerUser(x, y) = 0.0 // keep value only for kNN of user x
-                }
+    def keepKnnSuv(k: Int, suvPerUser: DenseMatrix[Double], firstInt:Int = 1): CSCMatrix[Double] = {
+        val suvPerUserFiltered_builder = new CSCMatrix.Builder[Double](rows=suvPerUser.rows, cols=suvPerUser.cols);
+        for (u <- 0 until suvPerUser.rows) {
+            val kNN_user = argtopk(suvPerUser(u, ::).t, k+1).toArray.slice(firstInt, k + 1); // 1 to k+1 because first one is the user itself
+            for (v <- kNN_user) {
+                suvPerUserFiltered_builder.add(u, v, suvPerUser(u,v)) // keep value only for kNN of user x
             }
         }
-        return suvPerUser
+        return suvPerUserFiltered_builder.result()
     }
 
-    def similarityFromNothing(s: CSCMatrix[Double], k: Int): DenseMatrix[Double] = {
+    def similarityFromNothing(s: CSCMatrix[Double], k: Int): CSCMatrix[Double] = {
         val averageUsers = averageRatingUsers(s)
         val devRatingItemsPerUser = averageDeviationItems(s, averageUsers)
         val suvPerUser = cosineSimilarity(devRatingItemsPerUser)
         return keepKnnSuv(k, suvPerUser)
     }
 
-    def averageDeviationItemsCosine(s: CSCMatrix[Double], devRatingItemsPerUser: DenseMatrix[Double], suvPerUserFiltered: DenseMatrix[Double]): DenseMatrix[Double] = {
-        val nonZerosIndicator = s.toDense.map(o => if (o != 0.0) 1.0 else 0.0)
-        val averageDevItemsCos = (suvPerUserFiltered * devRatingItemsPerUser) /:/ ((suvPerUserFiltered.map(o => abs(o)) * nonZerosIndicator).map(o => if (o != 0.0) o else 1.0))
+    def averageDeviationItemsCosine(s: CSCMatrix[Double], devRatingItemsPerUser: CSCMatrix[Double], suvPerUserFiltered: CSCMatrix[Double]): DenseMatrix[Double] = {
+        val nonZerosIndicator = s.map(o => if (o != 0.0) 1.0 else 0.0).toDense
+        val averageDevItemsCos = (suvPerUserFiltered.toDense * devRatingItemsPerUser.toDense) /:/ ((suvPerUserFiltered.map(o => abs(o)).toDense * nonZerosIndicator).map(o => if (o != 0.0) o else 1.0))
         return averageDevItemsCos
     }
 
