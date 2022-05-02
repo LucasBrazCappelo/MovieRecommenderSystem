@@ -46,14 +46,14 @@ object Optimizing extends App {
     val test = loadSpark(sc, conf.test(), conf.separator(), conf.users(), conf.movies())
 
     val measurements = (1 to conf.num_measurements()).map(x => timingInMs(() => {
-      val (kNN_model, suvPerUserFiltered) = kNN_builder(train.copy, 300)
+      val (kNN_model, suvPerUser) = kNN_builder(train.copy, 300)
       val kNN_MAE = computeMAE(test, kNN_model)
       kNN_MAE
     }))
     val timings = measurements.map(t => t._2)
 
-    val (kNN_model, suvPerUserFiltered) = kNN_builder(train, 10)
-    val suv = addAutoSimilarityZero(suvPerUserFiltered)
+    val (kNN_model, suvPerUser) = kNN_builder(train, 10)
+    val suv = addAutoSimilarityZero(suvPerUser)
     val kNN_MAE = computeMAE(test, kNN_model)
 
     // Save answers as JSON

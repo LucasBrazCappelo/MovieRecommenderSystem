@@ -56,14 +56,14 @@ object Exact {
     val test = loadSpark(sc, conf.test(), conf.separator(), conf.users(), conf.movies())
 
     val measurements = (1 to scala.math.max(3,conf.num_measurements())).map(_ => timingInMs( () => {
-      val (kNN_model, suvPerUserFiltered) = kNN_builder_parallel(train.copy, 300, sc)
+      val (kNN_model, suvPerUser) = kNN_builder_parallel(train.copy, 300, sc)
       val kNN_MAE = computeMAE(test, kNN_model) // TODO maybe parallel too
       kNN_MAE
     }))
     val timings = measurements.map(_._2)
     
-    val (kNN_model, suvPerUserFiltered) = kNN_builder_parallel(train, 10)
-    val suv = addAutoSimilarityZero(suvPerUserFiltered) // TODO maybe parallel too
+    val (kNN_model, suvPerUser) = kNN_builder_parallel(train, 10, sc)
+    val suv = addAutoSimilarityZero(suvPerUser) // TODO maybe parallel too
     val kNN_MAE = computeMAE(test, kNN_model) // TODO maybe parallel too
 
     // Save answers as JSON
