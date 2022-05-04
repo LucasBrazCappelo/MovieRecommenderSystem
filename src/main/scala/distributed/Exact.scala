@@ -62,7 +62,7 @@ object Exact {
     }))
     val timings = measurements.map(_._2)
     
-    val (kNN_model, suvPerUser) = kNN_builder_parallel(train, 10, sc)
+    val (kNN_model, suvPerUser) = kNN_builder_parallel(train, conf_k, sc)
     val suv = addAutoSimilarityZero(suvPerUser)
     val kNN_MAE = computeMAE(test, kNN_model)
 

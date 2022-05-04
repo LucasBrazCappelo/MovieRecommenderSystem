@@ -237,9 +237,9 @@ package object predictions
         return (kNN_model_builder.result().toDense, suvPerUser) 
     }
 
-    def topk(u: Int, br: Broadcast[DenseMatrix[Double]], k: Int): IndexedSeq[((Int, Int), Double)] = {
+    def topk(u: Int, br: Broadcast[DenseMatrix[Double]], k: Broadcast[Int]): IndexedSeq[((Int, Int), Double)] = {
         val suv_u: DenseVector[Double] = br.value * br.value.t(::, u)
-        return argtopk(suv_u, k + 1).map(v => ((u, v), suv_u(v)))
+        return argtopk(suv_u, k.value + 1).map(v => ((u, v), suv_u(v)))
     }
 
     def cosineSimilarityParallel(devRatingItemsPerUser: CSCMatrix[Double], k: Int, sc: SparkContext): CSCMatrix[Double] = {
@@ -253,9 +253,10 @@ package object predictions
         val halfSuv: DenseMatrix[Double] = halfSuv_builder.result().toDense
         val nb_users: Int = halfSuv.rows
 
-        val br = sc.broadcast(halfSuv)
+        val br: Broadcast[DenseMatrix[Double]] = sc.broadcast(halfSuv)
+        val br_k: Broadcast[Int] = sc.broadcast(k)
 
-        val topks: Array[IndexedSeq[((Int, Int), Double)]] = sc.parallelize(0 until nb_users).map(u => topk(u, br, k)).collect()
+        val topks: Array[IndexedSeq[((Int, Int), Double)]] = sc.parallelize(0 until nb_users).map(u => topk(u, br, br_k)).collect()
 
         val suvPerUser_builder = new CSCMatrix.Builder[Double](rows=nb_users, cols=nb_users)
         for (topks_node <- topks) {
@@ -268,6 +269,62 @@ package object predictions
 
     ///////////////////////// AK //////////////////////////////
 
-    
+    def kNN_builder_parallel_approx(s: CSCMatrix[Double], k: Int, sc: SparkContext, users: Seq[Set[Int]]): (DenseMatrix[Double], CSCMatrix[Double]) = {
+        val averageUsers: DenseVector[Double] = averageRatingUsers(s)
+        val devRatingItemsPerUser: CSCMatrix[Double] = averageDeviationItems(s, averageUsers) 
+        val suvPerUser: CSCMatrix[Double] = cosineSimilarityParallelApprox(devRatingItemsPerUser, k, sc, users)
+        val averageDevItemsCos: DenseMatrix[Double] = averageDeviationItemsCosine(s, devRatingItemsPerUser, suvPerUser)
+
+        val usersSet: DenseVector[Boolean] = s.toDense(*,::).map(o => any(o))
+
+        val kNN_model_builder = new CSCMatrix.Builder[Double](rows=s.rows, cols=s.cols);
+        for (user <- 0 until s.rows) {
+            for (item <- 0 until s.cols) {
+                kNN_model_builder.add(user, item, predictRating(averageUsers(user), averageDevItemsCos(user, item), usersSet(user)))
+            }
+        }
+        return (kNN_model_builder.result().toDense, suvPerUser)
+    }
+
+    def topkApprox(setU: Seq[Int], br: Broadcast[DenseMatrix[Double]], k: Broadcast[Int]): IndexedSeq[(Int, Int, Double)] = {
+        val subMatrix_devRatingItemsPerUser: DenseMatrix[Double] = br.value(setU, ::).toDenseMatrix // toDenseMatrix is useless if never only one line in setU
+        val subMatrix_suvPerUserDense: DenseMatrix[Double] = subMatrix_devRatingItemsPerUser * subMatrix_devRatingItemsPerUser.t
+        
+        val nb_users: Int = subMatrix_suvPerUserDense.rows
+
+        val kNN_user: IndexedSeq[(Int, Int, Double)] = (0 until nb_users)
+            .map(u => argtopk(subMatrix_suvPerUserDense(u, ::).t, scala.math.min(k.value+1,nb_users)) // We'll drop the autosimilarity after
+            .map(v => (setU(u), setU(v), subMatrix_suvPerUserDense(u, v))))
+            .flatten
+        return kNN_user
+    }
+
+    def cosineSimilarityParallelApprox(devRatingItemsPerUser: CSCMatrix[Double], k: Int, sc: SparkContext, users: Seq[Set[Int]]): CSCMatrix[Double] = {
+        val normsUsers: DenseVector[Double] = sum(devRatingItemsPerUser.mapActiveValues(o => o*o).toDense(*,::)).map(o => scala.math.sqrt(o))
+        val halfSuv_builder = new CSCMatrix.Builder[Double](rows=devRatingItemsPerUser.rows, cols=devRatingItemsPerUser.cols);
+        for (((user, item), value) <- devRatingItemsPerUser.activeIterator) {
+            if (normsUsers(user) != 0.0) {
+                halfSuv_builder.add(user, item, value/normsUsers(user))
+            }
+        }
+        val halfSuv: DenseMatrix[Double] = halfSuv_builder.result().toDense
+        val nb_users: Int = halfSuv.rows
+
+        val br: Broadcast[DenseMatrix[Double]] = sc.broadcast(halfSuv)
+        val br_k: Broadcast[Int] = sc.broadcast(k)
+
+        val topks: Array[IndexedSeq[(Int, Int, Double)]] = sc.parallelize(users).map(setU => topkApprox(setU.toSeq, br, br_k)).collect()
+
+        val topks_choosen: Map[Int, Array[(Int, Int, Double)]] = topks.flatten.groupBy(o => o._1)
+            .map(u => (u._1, u._2.sortWith(_._3 > _._3).slice(0, k+1)))
+
+        val suvPerUser_builder = new CSCMatrix.Builder[Double](rows=nb_users, cols=nb_users)
+        for (suv_u <- topks_choosen.valuesIterator) {
+            for ((u, v, value) <- suv_u) {
+                suvPerUser_builder.add(u, v, value)
+            }
+        }
+        return suvPerUser_builder.result()
+    }    
 
 }

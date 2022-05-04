@@ -66,11 +66,15 @@ object Approximate {
     )
     val measurements = (1 to scala.math.max(1,conf.num_measurements()))
       .map(_ => timingInMs( () => {
-      // Use partitionedUsers here
-      0.0
+      val (kNN_model, suvPerUser) = kNN_builder_parallel_approx(train.copy, 300, sc, partitionedUsers)
+      val kNN_MAE = computeMAE(test, kNN_model)
+      kNN_MAE
     }))
     val mae = measurements(0)._1
     val timings = measurements.map(_._2)
+
+    val (kNN_model, suvPerUser) = kNN_builder_parallel_approx(train, conf_k, sc, partitionedUsers)
+    val suv = addAutoSimilarityZero(suvPerUser)
 
     // Save answers as JSON
     def printToFile(content: String,
@@ -100,12 +104,12 @@ object Approximate {
             "replication" -> ujson.Num(conf.replication()) 
           ),
           "AK.1" -> ujson.Obj(
-            "knn_u1v1" -> ujson.Num(0.0),
-            "knn_u1v864" -> ujson.Num(0.0),
-            "knn_u1v344" -> ujson.Num(0.0),
-            "knn_u1v16" -> ujson.Num(0.0),
-            "knn_u1v334" -> ujson.Num(0.0),
-            "knn_u1v2" -> ujson.Num(0.0)
+            "knn_u1v1" -> ujson.Num(suv(0,0)),
+            "knn_u1v864" -> ujson.Num(suv(0,863)),
+            "knn_u1v344" -> ujson.Num(suv(0,343)),
+            "knn_u1v16" -> ujson.Num(suv(0,15)),
+            "knn_u1v334" -> ujson.Num(suv(0,333)),
+            "knn_u1v2" -> ujson.Num(suv(0,1))
           ),
           "AK.2" -> ujson.Obj(
             "mae" -> ujson.Num(mae) 
