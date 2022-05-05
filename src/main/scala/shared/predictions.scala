@@ -316,7 +316,7 @@ package object predictions
         val topks: Array[IndexedSeq[(Int, Int, Double)]] = sc.parallelize(users).map(setU => topkApprox(setU.toSeq, br, br_k)).collect()
 
         val topks_choosen: Map[Int, Array[(Int, Int, Double)]] = topks.flatten.groupBy(o => o._1)
-            .map(u => (u._1, u._2.sortWith(_._3 > _._3).slice(0, k+1)))
+            .map(u => (u._1, u._2.toSet.toArray.sortWith(_._3 > _._3).slice(0, k+1)))
 
         val suvPerUser_builder = new CSCMatrix.Builder[Double](rows=nb_users, cols=nb_users)
         for (suv_u <- topks_choosen.valuesIterator) {

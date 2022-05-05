@@ -5,25 +5,25 @@
         "k": 10,
         "users": 943,
         "movies": 1682,
-        "master": "local[4]",
+        "master": "local[1]",
         "num-executors": "",
-        "num_measurements": 1,
-        "partitions": 10,
-        "replication": 2
+        "num_measurements": 3,
+        "partitions": 8,
+        "replication": 1
     },
     "AK.1": {
         "knn_u1v1": 0,
         "knn_u1v864": 0,
-        "knn_u1v344": 0.23659364388510976,
+        "knn_u1v344": 0,
         "knn_u1v16": 0,
-        "knn_u1v334": 0.19282239907090362,
+        "knn_u1v334": 0,
         "knn_u1v2": 0
     },
     "AK.2": {
-        "mae": 0.7584399718717879
+        "mae": 0.7966932385082662
     },
     "AK.3": {
-        "average (ms)": 2682.9635,
-        "stddev (ms)": 0
+        "average (ms)": 1311.5390333333335,
+        "stddev (ms)": 360.8011644630538
     }
 }

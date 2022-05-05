@@ -7,7 +7,7 @@
         "movies": 1682,
         "master": "local[4]",
         "num-executors": "",
-        "num_measurements": 1
+        "num_measurements": 3
     },
     "EK.1": {
         "1.knn_u1v1": 0,
@@ -18,7 +18,7 @@
         "6.Mae": 0.8287277961963542
     },
     "EK.2": {
-        "average (ms)": 2297.0448,
-        "stddev (ms)": 0
+        "average (ms)": 1542.2791666666665,
+        "stddev (ms)": 359.66786222413907
     }
 }
