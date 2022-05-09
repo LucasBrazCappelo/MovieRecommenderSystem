@@ -1,0 +1,17 @@
+{
+    "E.1": {
+        "MinRentingDays": 1893
+    },
+    "E.2": {
+        "ContainerDailyCost": 0.540864,
+        "4RPisDailyCostIdle": 0.072,
+        "4RPisDailyCostComputing": 0.096,
+        "MinRentingDaysIdleRPiPower": 1507,
+        "MinRentingDaysComputingRPiPower": 1130
+    },
+    "E.3": {
+        "NbRPisEqBuyingICCM7": 355,
+        "RatioRAMRPisVsICCM7": 1.4671361502347417E-5,
+        "RatioComputeRPisVsICCM7": 0.034178403755868544
+    }
+}
