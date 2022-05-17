@@ -39,25 +39,29 @@ class ApproximateTests extends AnyFunSuite with BeforeAndAfterAll {
       2 
     )
 
+    val (kNN_model3, suv3PerUser) = kNN_builder_parallel_approx(train2, 10, sc, partitionedUsers)
+    val suv3 = addAutoSimilarityZero(suv3PerUser)
+    val kNN_MAE3 = computeMAE(test2, kNN_model3)
+
      // Similarity between user 1 and itself
-     assert(within(1.0, 0.0, 0.0001))
+     assert(within(suv3(0,0), 0.0, 0.0001))
  
      // Similarity between user 1 and 864
-     assert(within(1.0, 0.0, 0.0001))
+     assert(within(suv3(0,863), 0.0, 0.0001))
 
      // Similarity between user 1 and 344
-     assert(within(1.0, 0.0, 0.0001))
+     assert(within(suv3(0,343), 0.2365, 0.0001))
 
      // Similarity between user 1 and 16
-     assert(within(1.0, 0.0, 0.0001))
+     assert(within(suv3(0,15), 0.0, 0.0001))
 
      // Similarity between user 1 and 334
-     assert(within(1.0, 0.0, 0.0001))
+     assert(within(suv3(0,333), 0.1928, 0.0001))
 
      // Similarity between user 1 and 2
-     assert(within(1.0, 0.0, 0.0001))
+     assert(within(suv3(0,1), 0.0, 0.0001))
 
      // MAE on test
-     assert(within(1.0, 0.0, 0.0001))
+     assert(within(kNN_MAE3, 0.8398, 0.0001))
    } 
 }
