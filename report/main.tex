@@ -1,0 +1,326 @@
+\documentclass{article}
+
+% Déclarations de nouvelles commandes
+
+\usepackage{natbib}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+
+\usepackage{natbib,bibentry}
+\usepackage{color}
+
+\usepackage{yfonts}
+\usepackage{graphicx}
+\usepackage{epsfig,subfigure}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{hyperref}
+\usepackage{calc}
+\usepackage{import}
+\usepackage{ragged2e}
+\usepackage{placeins}
+\usepackage{caption}
+
+
+\usepackage[T1]{fontenc}
+\usepackage{beramono}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstdefinestyle{scala}{
+  frame=tb,
+  language=scala,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3,
+}
+
+\lstdefinestyle{json}{
+  frame=tb,
+  language=scala,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{green},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{blue},
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3,
+}
+
+\DeclareGraphicsExtensions{.eps, .jpg, .png}
+
+\parindent = 0mm
+
+\bibliographystyle{plain}
+
+\hoffset = -20mm
+\voffset = -25mm
+\textwidth = 160mm
+\textheight = 240mm
+
+\definecolor{lightgray}{gray}{0.2}
+
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
+\newcommand{\expect}{{\rm I \mkern-2.5mu \nonscript\mkern-.5mu E}}
+\newcommand{\equaldef}{\stackrel{d}{=}}
+\newcommand{\argmax}{\operatornamewithlimits{argmax}}
+
+\newcommand{\debutrep}[1]{\color{blue}\begin{center} \hrulefill \textbf{ #1 } \hrulefill \end{center} }
+\newcommand{\finrep}{\vspace*{5mm}\hfill $\square$\color{black}\vspace*{5mm}}
+
+\baselineskip = 4mm
+\title{CS-449 Project Milestone 2: Optimizing, Scaling, and Economics}
+
+\author{\textbf{Ecole Polytechnique Fédérale de Lausanne }\\[3mm]}
+\date{2021-2022}
+
+\begin{document}
+
+\maketitle
+\noindent
+
+\HRule\\[3mm]
+{\large \bf Braz Lucas - Durand Pierre-Alain}\\[3mm]
+{\large \bf SCIPER: 343141 - 344313}\\[3mm]
+{\large \bf Date: 20/05/2022}\\[2mm]
+\HRule\\
+\vspace*{5mm}
+
+\baselineskip = 4mm
+
+\tableofcontents
+
+\newpage
+\justify
+
+\section{Our setup}
+We used the same machine for all the Project, including Milestone 1. Our setup specification :
+\FloatBarrier
+\begin{table}[ht]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|}
+\textbf{CPU Model} & \textbf{CPU speed} & \textbf{RAM} & \textbf{OS}  & \textbf{Scala version} & \textbf{JVM version} \\
+\hline
+Intel i5-9300H & 2.40GHz & 8Gio & Windows 10  & Scala 3.1.1 & JVM 1.8.0\_292 64-Bit\\
+\end{tabular}
+\label{tbl:results}
+\end{table}
+\FloatBarrier
+Our code implementations for each part can be found in the \textit{src/} folder.
+
+\section{BR - Optimizing}
+For this section, to get the prediction kNN model we use this code line :
+\begin{lstlisting}[style=scala]
+val (kNN_model, suvPerUser) = kNN_builder(train, conf_k)
+\end{lstlisting}
+Then, as for two next sections, the similarity coefficient go in the function :
+\begin{lstlisting}[style=scala]
+val suv = addAutoSimilarityZero(suvPerUser)
+\end{lstlisting}
+Which return the similarity coefficient with the right coefficient ($0.0$) for auto-similarity.\\
+And we compute the MAE with :
+\begin{lstlisting}[style=scala]
+val kNN_MAE = computeMAE(test, kNN_model)
+\end{lstlisting}
+
+\subsection{BR.1}
+Our result, using our new optimized implementation, with k=10 :
+\begin{lstlisting}[style=json]
+"BR.1": {
+    "1.k10u1v1": 0,
+    "2.k10u1v864": 0.24232304952129619,
+    "3.k10u1v886": 0,
+    "4.PredUser1Item1": 4.319093503763853,
+    "5.PredUser327Item2": 2.6994178006921192,
+    "6.Mae": 0.8287277961963542
+}
+\end{lstlisting}
+These results are consistent with those found in milestone 1.
+
+\subsection{BR.2}
+Our timing results for $k=300$:
+\begin{lstlisting}[style=json]
+"BR.2": {
+    "average (ms)": 967.6141333333334,
+    "stddev (ms)": 244.57493440683757
+}
+\end{lstlisting}
+With our last, slow, implementation, we got, with same k and same dataset : 140778.73679999998 ms. \\
+The speedup is therefore a ratio of $\frac{140778}{967}=145.5$. Our implementation was probably really not optimized, which should be taken into account.
+
+\section{EK - Distributed Exact}
+For this section, to get the prediction kNN model we use this code line :
+\begin{lstlisting}[style=scala]
+val (kNN_model, suvPerUser) = kNN_builder_parallel(train, conf_k, sc)
+\end{lstlisting}
+
+\subsection{EK.1}
+Our result, using our new optimized and distributed implementation, with k=10 :
+\begin{lstlisting}[style=json]
+"EK.1": {
+    "1.knn_u1v1": 0,
+    "2.knn_u1v864": 0.24232304952129619,
+    "3.knn_u1v886": 0,
+    "4.PredUser1Item1": 4.319093503763853,
+    "5.PredUser327Item2": 2.6994178006921192,
+    "6.Mae": 0.8287277961963542
+}
+\end{lstlisting}
+These results are still consistent with those found in BR part.
+
+\subsection{EK.2}
+Our timing results for $k=300$ with 1 worker:
+\begin{lstlisting}[style=json]
+"EK.2": {
+    "average (ms)": 2699.582766666667,
+    "stddev (ms)": 444.9510487546343
+}
+\end{lstlisting}
+
+Our timing results for $k=300$ with 2 workers:
+\begin{lstlisting}[style=json]
+"EK.2": {
+    "average (ms)": 2105.1248,
+    "stddev (ms)": 391.2953743800796
+}
+\end{lstlisting}
+
+Our timing results for $k=300$ with 4 workers:
+\begin{lstlisting}[style=json]
+"EK.2": {
+        "average (ms)": 1542.2791666666665,
+        "stddev (ms)": 359.66786222413907
+}
+\end{lstlisting}
+
+Doubling the number of workers seems to decrease linearly the computation time. The improvement is therefore logarithmic. \\
+We don't observe a speedup compared to the BR part, which is quite surprising. Maybe there is a time required to parallelize which make the parallelization usefull for longer computations (on 1M dataset for example).
+
+\section{AK - Distributed Approximate}
+For this section, to get the prediction kNN model we use this code line :
+\begin{lstlisting}[style=scala]
+val (kNN_model, suvPerUser) = kNN_builder_parallel_approx(train, conf_k, sc, partitionedUsers)
+\end{lstlisting}
+
+\subsection{AK.1}
+Our result, using our new optimized, distributed and approximate implementation, with k=10, 10 partitions and 2 replications :
+\begin{lstlisting}[style=json]
+"AK.1": {
+    "knn_u1v1": 0,
+    "knn_u1v864": 0,
+    "knn_u1v344": 0.23659364388510976,
+    "knn_u1v16": 0,
+    "knn_u1v334": 0.19282239907090362,
+    "knn_u1v2": 0
+}
+\end{lstlisting}
+
+\subsection{AK.2}
+Our MAE, using our new optimized, distributed and approximate implementation, with k=300, 10 partitions and 2 replications :
+\begin{lstlisting}[style=json]
+"AK.2": {
+    "mae": 0.7584399718717879
+}
+\end{lstlisting}
+
+By varying the level of replication, but with k=300 and 10 partitions, we obtain the following table giving the MAE according to the replication:
+\FloatBarrier
+\begin{table}[ht]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\textbf{Replication} & 1 & 2 & 3 & 4 & 6 & 8 \\
+\hline
+\textbf{MAE} & 0.8056 & 0.7563 & 0.7457 & 0.7410 & 0.7391 & 0.7391\\
+\end{tabular}
+\label{tbl:results2}
+\end{table}
+\FloatBarrier
+
+The minimum level of replication such that MAE is still lower than the baseline predictor of Milestone 1 (MAE of 0.7604), with k=300 and 10 partitions is : 2.
+
+This reduce the number of similarity compared to an exact k-NN. Indeed by splitting we calculate a ratio of $\frac{N_{replications}}{N_{partitions}}$ of the exact k-NN required computations.
+
+\subsection{AK.3}
+Our timing results for $k=300$ and 8 partitions with a replication factor of 1 and 1 worker:
+\begin{lstlisting}[style=json]
+"AK.3": {
+    "average (ms)": 1311.5390333333335,
+    "stddev (ms)": 360.8011644630538
+}
+\end{lstlisting}
+Our timing results for $k=300$ and 8 partitions with a replication factor of 1 and 2 workers:
+\begin{lstlisting}[style=json]
+"AK.3": {
+    "average (ms)": 1164.2723333333333,
+    "stddev (ms)": 350.42248729324183
+}
+\end{lstlisting}
+Our timing results for $k=300$ and 8 partitions with a replication factor of 1 and 4 workers:
+\begin{lstlisting}[style=json]
+"AK.3": {
+    "average (ms)": 1104.0921999999998,
+    "stddev (ms)": 439.6526489481668
+}
+\end{lstlisting}
+We clearly see a speedup compared to the distributed exact version.
+
+\section{E - Economics}
+
+\subsection{E.1}
+\begin{lstlisting}[style=json]
+"E.1": {
+    "MinRentingDays": 1893
+}
+\end{lstlisting}
+The minimum number of days of renting to make buying the ICC.M7 less expensive is 1893 days
+
+\subsection{E.2}
+\begin{lstlisting}[style=json]
+"E.2": {
+    "ContainerDailyCost": 0.540864,
+    "4RPisDailyCostIdle": 0.072,
+    "4RPisDailyCostComputing": 0.096,
+    "MinRentingDaysIdleRPiPower": 1507,
+    "MinRentingDaysComputingRPiPower": 1130
+}
+\end{lstlisting}
+
+\subsection{E.3}
+\begin{lstlisting}[style=json]
+"E.3": {
+    "NbRPisEqBuyingICCM7": 355,
+    "RatioRAMRPisVsICCM7": 0.5408450704225352,
+    "RatioComputeRPisVsICCM7": 0.034178403755868544
+}
+\end{lstlisting}
+
+\end{document}
+%\FloatBarrier
+%\begin{figure}[ht]
+%\centering
+%\includegraphics[scale=0.35]{image.png}
+%\caption{a caption}
+%\label{fig:first}
+%\end{figure}
+%\FloatBarrier
