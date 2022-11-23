@@ -1,4 +1,4 @@
-# Movie Recommender System project - Scala - MovieLens dataset
+# Movie Recommender System project - Scala - Spark - MovieLens dataset
 ## Class Project - CS-449 - Systems for Data Science - EPFL
 
 We built a movie recommender system in Scala during a class project at EPFL.    
