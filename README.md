@@ -1,4 +1,14 @@
-# Milestone Description
+# Movie Recommender System project - Scala - MovieLens dataset
+## Class Project - CS-449 - Systems for Data Science - EPFL
+
+We built a movie recommender system in Scala during a class project at EPFL.    
+We started from the template at this following link: https://gitlab.epfl.ch/sacs/cs-449-sds-public/project/cs449-template-m2-2022     
+Our homemade fonctions are mostly in the [src/main/scala/shared/predictions.scala](src/main/scala/shared/predictions.scala) file (and we edited the tests files with assertions in [src/test/scala](src/test/scala) and others files in [src/main/scala](src/main/scala))    
+Based on Spark with Scala language and Breeze library. The recommender is based on kNN with cosine similarity.
+
+____
+Initial template README.md:
+# Description
 
 [Milestone-2.pdf](./Milestone-2.pdf)
 
